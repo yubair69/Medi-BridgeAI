@@ -23,4 +23,5 @@ Thumbs.db
 playwright-report/
 test-results/
 pretrained_models/
+.model_cache/
 .dev-pids.json
