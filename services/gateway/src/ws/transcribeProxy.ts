@@ -22,9 +22,12 @@ export async function registerTranscribeProxy(
     const upstream = new UpstreamWebSocket(options.upstreamUrl);
     const pendingFromClient: Buffer[] = [];
     let upstreamOpen = false;
+    let clientPackets = 0;
+    let clientBytes = 0;
 
     upstream.on("open", () => {
       upstreamOpen = true;
+      app.log.info("transcribeProxy: upstream connection established to speech-pipeline");
       for (const chunk of pendingFromClient.splice(0)) {
         upstream.send(chunk);
       }
@@ -46,7 +49,7 @@ export async function registerTranscribeProxy(
       // audio into a void.
       if (clientSocket.readyState === clientSocket.OPEN) {
         clientSocket.send(
-          JSON.stringify({
+            JSON.stringify({
             type: "error",
             utterance_id: "n/a",
             error: `speech-pipeline unavailable: ${err.message}`,
@@ -58,6 +61,13 @@ export async function registerTranscribeProxy(
 
     clientSocket.on("message", (data: RawData) => {
       const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+      clientPackets++;
+      clientBytes += buf.byteLength;
+      if (clientPackets === 1 || clientPackets % 100 === 0) {
+        app.log.info(
+          `transcribeProxy: forwarded ${clientPackets} packets (${clientBytes} bytes) to speech-pipeline`,
+        );
+      }
       if (upstreamOpen) {
         upstream.send(buf);
       } else {

@@ -14,6 +14,17 @@
     "test:js": "npm run test:web && npm run test:gateway",
     "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1",
     "dev:real": "powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -Real",
-    "dev:stop": "powershell -ExecutionPolicy Bypass -File scripts/dev-down.ps1"
+    "dev:stop": "powershell -ExecutionPolicy Bypass -File scripts/dev-down.ps1",
+    "dev:linux": "bash scripts/dev-up.sh",
+    "dev:linux:real": "bash scripts/dev-up.sh --real",
+    "dev:linux:stop": "bash scripts/dev-up.sh --stop",
+    "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1",
+    "setup:real": "powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1 -Real",
+    "setup:linux": "bash scripts/setup-dev.sh",
+    "setup:linux:real": "bash scripts/setup-dev.sh --real"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true
   }
 }

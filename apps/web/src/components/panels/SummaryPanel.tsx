@@ -1,5 +1,8 @@
+import { useState } from "react";
 import type { StructuredSummary, SummaryBullet } from "../../hooks/useConversationMemory";
 import { useTheme } from "../../theme/ThemeProvider";
+import { GATEWAY_HTTP_URL } from "../../config";
+import { pcm16ToWavDataUrl } from "../../audio/wav";
 
 export interface SummaryPanelProps {
   sessionId: string | null;
@@ -52,6 +55,37 @@ export function SummaryPanel({
   onApprove,
 }: SummaryPanelProps) {
   const { colors } = useTheme();
+  const [patientAudioUrl, setPatientAudioUrl] = useState<string | null>(null);
+  const [patientScript, setPatientScript] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+
+  const handleGeneratePatientAudio = async () => {
+    if (!summary) return;
+    setIsLoadingAudio(true);
+    setAudioError(null);
+    try {
+      const res = await fetch(`${GATEWAY_HTTP_URL}/tts/patient-instructions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medications: summary.medications.map((m) => m.text),
+          recommendations: summary.recommendations.map((r) => r.text),
+          follow_up: summary.follow_up[0]?.text || null,
+          language: "hi",
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const wavUrl = pcm16ToWavDataUrl(data.audio_base64, data.sample_rate);
+      setPatientAudioUrl(wavUrl);
+      setPatientScript(data.spoken_script);
+    } catch (err) {
+      setAudioError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  };
 
   if (!sessionId) {
     return (
@@ -122,8 +156,66 @@ export function SummaryPanel({
 
           <p style={{ color: colors.textSecondary, fontSize: 11 }}>Model: {summary.model_name}</p>
 
+          {/* Spoken Hindi Patient Care & Medication Instructions (MMS-TTS) */}
+          <div
+            style={{
+              marginTop: 12,
+              paddingTop: 10,
+              borderTop: `1px solid ${colors.border}`,
+            }}
+          >
+            <button
+              onClick={handleGeneratePatientAudio}
+              disabled={isLoadingAudio}
+              style={{
+                background: "rgba(16, 185, 129, 0.12)",
+                border: `1px solid ${colors.success}`,
+                color: colors.success,
+                borderRadius: 6,
+                padding: "6px 12px",
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span>🎧</span>
+              <span>
+                {isLoadingAudio
+                  ? "ऑडियो तैयार हो रहा है…"
+                  : "मरीज़ के लिए आवाज़ में निर्देश (Listen Hindi Audio Discharge)"}
+              </span>
+            </button>
+
+            {audioError && (
+              <p style={{ color: colors.danger, fontSize: 11, marginTop: 4 }}>
+                Audio failed: {audioError}
+              </p>
+            )}
+
+            {patientAudioUrl && (
+              <div style={{ marginTop: 8 }}>
+                <audio controls src={patientAudioUrl} style={{ width: "100%", height: 36 }} />
+                {patientScript && (
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                      marginTop: 4,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    &quot;{patientScript}&quot;
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {!approved && (
-            <button onClick={onApprove} style={{ marginTop: 4 }}>
+            <button onClick={onApprove} style={{ marginTop: 8 }}>
               Approve summary
             </button>
           )}

@@ -72,11 +72,14 @@ def test_fixture_mode_off_by_default_attempts_the_real_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Without MEDIBRIDGE_FIXTURE_MODE, the factory must take the "real
-    provider" branch, not silently fall back to the static one. Proven
-    here by the RuntimeError faster-whisper's absence produces in this
-    (non-ASR-extras) test environment -- if fixture mode were wrongly
-    selected by default, this would return a StaticASRProvider instead
-    and no error would be raised."""
+    provider" branch, not silently fall back to the static one.
+    If faster-whisper is installed, it returns a FasterWhisperASRProvider.
+    If faster-whisper is not installed, it raises RuntimeError."""
     monkeypatch.delenv("MEDIBRIDGE_FIXTURE_MODE", raising=False)
-    with pytest.raises(RuntimeError, match="not installed"):
-        get_asr_provider()
+    try:
+        provider = get_asr_provider()
+        from app.asr.faster_whisper_provider import FasterWhisperASRProvider
+        assert isinstance(provider, FasterWhisperASRProvider)
+    except RuntimeError as exc:
+        assert "faster-whisper is not installed" in str(exc)
+

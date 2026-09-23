@@ -18,5 +18,5 @@ def get_tts_provider() -> TTSProvider:
 
     from app.tts.mms_provider import MmsTTSProvider
 
-    model_name = os.environ.get("TTS_MODEL_NAME", "facebook/mms-tts-eng")
+    model_name = os.environ.get("TTS_MODEL_NAME")
     return MmsTTSProvider(model_name=model_name)

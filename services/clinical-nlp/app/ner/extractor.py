@@ -18,6 +18,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from app.lexicons.loader import MedicalLexicon
 from app.ner.schemas import MedicalEntity
@@ -47,7 +48,11 @@ def _similarity(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-def extract_entities(text: str, lexicon: MedicalLexicon) -> list[MedicalEntity]:
+def extract_entities(
+    text: str,
+    lexicon: MedicalLexicon,
+    neural_provider: Any = None,
+) -> list[MedicalEntity]:
     tokens = _tokenize(text)
     candidates: list[MedicalEntity] = []
 
@@ -75,6 +80,13 @@ def extract_entities(text: str, lexicon: MedicalLexicon) -> list[MedicalEntity]:
                         is_fuzzy_match=ratio < 1.0,
                     )
                 )
+
+    if neural_provider is not None:
+        try:
+            neural_entities = neural_provider.extract(text)
+            candidates.extend(neural_entities)
+        except Exception:
+            pass
 
     return _resolve_overlaps(candidates)
 

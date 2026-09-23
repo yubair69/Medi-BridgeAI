@@ -67,8 +67,11 @@ def create_transcribe_router(
         # (RBAC) is where a real session identity gets threaded through.
         session_id = uuid.uuid4().hex
 
+        import asyncio
+
+        loop = asyncio.get_event_loop()
         try:
-            provider = get_provider()
+            provider = await loop.run_in_executor(None, get_provider)
         except RuntimeError as exc:
             # Fail loud, not silent (Blueprint Section 1 Principle 3): tell
             # the client ASR is unavailable instead of accepting audio that
@@ -91,35 +94,83 @@ def create_transcribe_router(
         diarizer_error: str | None = None
         if get_embedding_provider is not None:
             try:
-                diarizer = SpeakerDiarizer(get_embedding_provider())
+                diarizer = SpeakerDiarizer(await loop.run_in_executor(None, get_embedding_provider))
             except Exception as exc:  # noqa: BLE001 - degrade, don't crash the session
                 logger.exception("diarization unavailable for this session")
                 diarizer_error = str(exc)
 
+        import asyncio as _asyncio
+        _loop = _asyncio.get_event_loop()
+        _send_queue: _asyncio.Queue[TranscriptEvent | None] = _asyncio.Queue()
+
+        async def _reader() -> None:
+            """Reads audio chunks continuously so the TCP buffer never stalls."""
+            chunks_received = 0
+            bytes_received = 0
+            try:
+                while True:
+                    chunk = await websocket.receive_bytes()
+                    chunks_received += 1
+                    bytes_received += len(chunk)
+                    if chunks_received == 1 or chunks_received % 100 == 0:
+                        logger.info(
+                            "session %s: received %d audio chunks (%d bytes)",
+                            session_id[:8],
+                            chunks_received,
+                            bytes_received,
+                        )
+                    try:
+                        events = await _loop.run_in_executor(None, session.push_chunk, chunk)
+                    except Exception:
+                        logger.exception("push_chunk failed, continuing")
+                        continue
+                    for ev in events:
+                        await _send_queue.put(ev)
+            except WebSocketDisconnect:
+                pass
+            except RuntimeError as exc:
+                if "not connected" in str(exc).lower():
+                    logger.info("session %s: client disconnected", session_id[:8])
+                else:
+                    logger.exception("_reader task encountered error: %s", exc)
+            except Exception:
+                logger.exception("_reader task died unexpectedly")
+            finally:
+                logger.info(
+                    "session %s: audio reader ended (total %d chunks, %d bytes)",
+                    session_id[:8],
+                    chunks_received,
+                    bytes_received,
+                )
+                await _send_queue.put(None)  # sentinel
+
+        _asyncio.create_task(_reader())
+
         last_risk_level: RiskLevel | None = None
         try:
             while True:
-                chunk = await websocket.receive_bytes()
-                for event in session.push_chunk(chunk):
-                    event = event.model_copy(update={"session_id": session_id})
-                    event = await _enrich_final_event(
-                        event,
-                        get_mt_provider,
-                        get_tts_provider,
-                        get_miscommunication_checker,
-                        get_entity_extractor,
-                        get_emergency_detector,
-                        get_emotion_classifier,
-                        get_risk_scorer,
-                        session,
-                        diarizer,
-                        diarizer_error,
-                    )
-                    await websocket.send_json(event.model_dump())
-                    await _record_utterance(event, session_id, get_orchestrator_client)
-                    last_risk_level = await _record_timeline_events(
-                        event, session_id, get_orchestrator_client, last_risk_level
-                    )
+                raw_event = await _send_queue.get()
+                if raw_event is None:
+                    break
+                event = raw_event.model_copy(update={"session_id": session_id})
+                event = await _enrich_final_event(
+                    event,
+                    get_mt_provider,
+                    get_tts_provider,
+                    get_miscommunication_checker,
+                    get_entity_extractor,
+                    get_emergency_detector,
+                    get_emotion_classifier,
+                    get_risk_scorer,
+                    session,
+                    diarizer,
+                    diarizer_error,
+                )
+                await websocket.send_json(event.model_dump())
+                await _record_utterance(event, session_id, get_orchestrator_client)
+                last_risk_level = await _record_timeline_events(
+                    event, session_id, get_orchestrator_client, last_risk_level
+                )
         except WebSocketDisconnect:
             for event in session.flush():
                 # Nothing to send to a disconnected client; this exercises
@@ -174,14 +225,17 @@ async def _enrich_final_event(
     if event.type != "final" or event.segment is None or not event.segment.text.strip():
         return event
 
+    import asyncio as _asyncio
+    _loop = _asyncio.get_event_loop()
+
     event = await _run_emergency_detection(event, get_emergency_detector)
-    event = _run_translation(event, get_mt_provider)
-    event = _run_back_translation(event, get_mt_provider)
+    event = await _loop.run_in_executor(None, _run_translation, event, get_mt_provider)
+    event = await _loop.run_in_executor(None, _run_back_translation, event, get_mt_provider)
     event = await _run_miscommunication_check(event, get_miscommunication_checker)
-    event = _run_tts(event, get_tts_provider)
-    event = _run_diarization(event, session, diarizer, diarizer_error)
+    event = await _loop.run_in_executor(None, _run_tts, event, get_tts_provider)
+    event = await _loop.run_in_executor(None, _run_diarization, event, session, diarizer, diarizer_error)
     event = await _run_entity_extraction(event, get_entity_extractor)
-    event = _run_emotion_classification(event, session, get_emotion_classifier)
+    event = await _loop.run_in_executor(None, _run_emotion_classification, event, session, get_emotion_classifier)
     event = await _run_risk_scoring(event, get_risk_scorer)
     return event
 
@@ -192,7 +246,10 @@ def _run_translation(event: TranscriptEvent, get_mt_provider: MTProviderGetter |
     try:
         segment = event.segment
         assert segment is not None
-        translation = get_mt_provider().translate(segment.text, segment.language, "en")
+        if not segment.text.strip():
+            return event
+        target_lang = "hi" if segment.language == "en" else "en"
+        translation = get_mt_provider().translate(segment.text, segment.language, target_lang)
         return event.model_copy(update={"translation": translation})
     except Exception as exc:  # noqa: BLE001 - any MT failure degrades, never crashes the session
         logger.exception("translation failed for utterance %s", event.utterance_id)
@@ -200,12 +257,14 @@ def _run_translation(event: TranscriptEvent, get_mt_provider: MTProviderGetter |
 
 
 def _run_back_translation(event: TranscriptEvent, get_mt_provider: MTProviderGetter | None) -> TranscriptEvent:
-    """EN -> HI, the reverse leg of Blueprint Section 3.2 step 6's
+    """EN -> HI (or HI -> EN), the reverse leg of Blueprint Section 3.2 step 6's
     back-translation consistency check. Only runs when the forward
     translation succeeded -- there's nothing to translate back otherwise."""
     if get_mt_provider is None or event.translation is None:
         return event
     try:
+        if not event.translation.text.strip():
+            return event
         back_translation = get_mt_provider().translate(
             event.translation.text, event.translation.target_language, event.translation.source_language
         )

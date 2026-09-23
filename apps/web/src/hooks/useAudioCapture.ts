@@ -8,6 +8,7 @@ const BUFFER_SIZE = 4096;
  * needing a full jsdom Web Audio implementation (jsdom has none). */
 export interface AudioContextLike {
   sampleRate: number;
+  state?: string;
   createMediaStreamSource(stream: MediaStream): { connect(node: unknown): void };
   createScriptProcessor(
     bufferSize: number,
@@ -15,6 +16,7 @@ export interface AudioContextLike {
     numberOfOutputChannels: number,
   ): ScriptProcessorNodeLike;
   destination: unknown;
+  resume?(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -93,6 +95,9 @@ export function useAudioCapture(options: UseAudioCaptureOptions): AudioCaptureSt
 
       const context = createAudioContext();
       contextRef.current = context;
+      if (context.state === "suspended" && typeof context.resume === "function") {
+        await context.resume();
+      }
       const source = context.createMediaStreamSource(stream);
       const processor = context.createScriptProcessor(BUFFER_SIZE, 1, 1);
       processorRef.current = processor;

@@ -13,6 +13,7 @@ export interface TranscriptSocketOptions {
  * throwing/being silently dropped (Blueprint Section 1 Principle 3). */
 export class TranscriptSocket {
   private socket: WebSocket | null = null;
+  private pendingChunks: ArrayBuffer[] = [];
 
   constructor(private readonly options: TranscriptSocketOptions) {}
 
@@ -20,8 +21,16 @@ export class TranscriptSocket {
     const Impl = this.options.WebSocketImpl ?? WebSocket;
     const socket = new Impl(this.options.url);
     socket.binaryType = "arraybuffer";
-    socket.onopen = () => this.options.onOpen?.();
-    socket.onclose = () => this.options.onClose?.();
+    socket.onopen = () => {
+      for (const pending of this.pendingChunks.splice(0)) {
+        socket.send(pending);
+      }
+      this.options.onOpen?.();
+    };
+    socket.onclose = () => {
+      this.pendingChunks = [];
+      this.options.onClose?.();
+    };
     socket.onmessage = (event: MessageEvent<string>) => {
       try {
         const parsed = JSON.parse(event.data) as TranscriptEvent;
@@ -65,10 +74,15 @@ export class TranscriptSocket {
   sendChunk(chunk: ArrayBuffer): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(chunk);
+    } else if (this.socket?.readyState === WebSocket.CONNECTING) {
+      if (this.pendingChunks.length < 50) {
+        this.pendingChunks.push(chunk);
+      }
     }
   }
 
   close(): void {
+    this.pendingChunks = [];
     this.socket?.close();
     this.socket = null;
   }

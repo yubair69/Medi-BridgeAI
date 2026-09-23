@@ -12,6 +12,7 @@ docs/PROGRESS.md.
 from __future__ import annotations
 
 import array
+import logging
 import statistics
 import time
 import uuid
@@ -20,10 +21,15 @@ from dataclasses import dataclass, field
 from app.asr.provider import ASRProvider
 from app.asr.schemas import TranscriptEvent, TranscriptSegment
 
+logger = logging.getLogger(__name__)
+
 FRAME_MS = 30
 SILENCE_HANG_MS = 500  # sustained silence before an utterance is finalized
 PARTIAL_INTERVAL_MS = 600  # minimum spacing between partial updates
-RMS_SPEECH_THRESHOLD = 250  # int16 RMS energy: speech vs silence gate
+# plain RMS gate: 250 handles normal conversational mic input while filtering ambient hiss/fan noise.
+# Tune via ASR_RMS_THRESHOLD env var if needed.
+import os as _os
+RMS_SPEECH_THRESHOLD = int(_os.environ.get("ASR_RMS_THRESHOLD", "250"))
 
 
 def frame_byte_size(sample_rate: int, frame_ms: int = FRAME_MS) -> int:
@@ -160,5 +166,13 @@ class StreamingASRSession:
 
     def _finalize(self) -> TranscriptEvent:
         event = self._emit(is_final=True)
+        if event.segment and event.segment.text:
+            logger.info(
+                "Utterance %s finalized: text=%r duration_ms=%d (latency=%.1fms)",
+                event.utterance_id[:8],
+                event.segment.text,
+                event.segment.end_ms,
+                event.latency_ms or 0.0,
+            )
         self._utterance = None
         return event

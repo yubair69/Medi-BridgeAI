@@ -102,6 +102,13 @@ export function useConversationMemory(
     if (!sessionId) return;
     try {
       const response = await fetchImpl(`${gatewayHttpUrl}/sessions/${sessionId}/memory`);
+      if (response.status === 404) {
+        // Session exists in gateway but orchestrator has no utterances yet —
+        // normal at the start of a consultation before the first transcript event.
+        setMemory(null);
+        setError(null);
+        return;
+      }
       if (!response.ok) {
         setError(`Conversation memory unavailable (status ${response.status})`);
         return;

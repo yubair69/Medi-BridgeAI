@@ -35,15 +35,25 @@ class NLLBTranslationProvider(MTProvider):
                 "MT provider; otherwise use FixtureMTProvider for tests."
             ) from exc
 
+        import torch
+
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self._model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        self._model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self._device)
 
     def translate(self, text: str, source_lang: str, target_lang: str) -> TranslationSegment:
+        if source_lang == target_lang:
+            return TranslationSegment(
+                text=text.strip(),
+                source_language=source_lang,
+                target_language=target_lang,
+            )
+
         src_code = _resolve_code(source_lang)
         tgt_code = _resolve_code(target_lang)
 
         self._tokenizer.src_lang = src_code
-        inputs = self._tokenizer(text, return_tensors="pt")
+        inputs = self._tokenizer(text, return_tensors="pt").to(self._device)
         forced_bos_token_id = self._tokenizer.convert_tokens_to_ids(tgt_code)
         generated = self._model.generate(
             **inputs,

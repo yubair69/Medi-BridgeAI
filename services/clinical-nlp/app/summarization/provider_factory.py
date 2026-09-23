@@ -17,13 +17,12 @@ def get_summarizer() -> Summarizer:
 
         return StaticSummarizer()
 
+    from app.summarization.local_summarizer import LocalClinicalSummarizer
     from app.summarization.openrouter_provider import OpenRouterSummarizer
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY is not set. Set it in .env to use the real summarizer; "
-            "otherwise set MEDIBRIDGE_FIXTURE_MODE=1 for StaticSummarizer."
-        )
+        return LocalClinicalSummarizer()
+
     model_name = os.environ.get("OPENROUTER_SUMMARIZATION_MODEL", "anthropic/claude-sonnet-4.5")
     return OpenRouterSummarizer(api_key=api_key, model_name=model_name)

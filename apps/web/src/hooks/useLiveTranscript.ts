@@ -52,6 +52,9 @@ export function useLiveTranscript(options: UseLiveTranscriptOptions): UseLiveTra
     setSocketError(null);
     setEvents([]);
 
+    // Start mic capture within user gesture so AudioContext is not suspended
+    void captureStartRef.current();
+
     const socket = new TranscriptSocket({
       url: options.gatewayWsUrl,
       WebSocketImpl: options.WebSocketImpl,
@@ -62,9 +65,6 @@ export function useLiveTranscript(options: UseLiveTranscriptOptions): UseLiveTra
           // (Blueprint Section 1 Principle 3).
           setSocketError(event.error ?? "Unknown transcription error");
         }
-      },
-      onOpen: () => {
-        void captureStartRef.current();
       },
       onClose: () => {
         captureStopRef.current();

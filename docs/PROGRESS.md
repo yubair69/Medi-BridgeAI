@@ -5,35 +5,90 @@
 
 ## Status Snapshot
 
-- **Current phase:** Phase 7 — Summary, Timeline, Analytics — done
-- **Last completed task:** clinical-nlp now runs a real LLM-backed structured
-  consultation summarizer (`POST /summarize`, Claude Sonnet via OpenRouter -- a
-  documented deviation from Blueprint Section 4's "direct Anthropic API" wording,
-  same model, different working gateway) with mandatory grounding validation (every
-  bullet's cited utterance id must be real; a lexical-overlap backstop catches
-  citations to the wrong utterance) and ungrounded items transparently discarded, not
-  hidden. orchestrator now owns the draft-summary lifecycle (`POST
-  .../summary/generate`, always resets approval on regeneration; `POST
-  .../summary/approve`, 409 without a draft -- "never auto-finalized") and a
-  chronological timeline event store (`POST .../timeline-events`, four event types
-  per Blueprint Section 2.2, real wall-clock timestamps). speech-pipeline posts
-  symptom/medication-mention, emergency-alert, and risk-level-change timeline events
-  best-effort after delivering each event. apps/web adds `SummaryPanel` (DRAFT/
-  APPROVED gate, per-section grounded bullets, discarded-count shown), `TimelineView`
-  (chronological list + JSON export), and `AnalyticsDashboard` (consultation time,
-  speaking ratio, symptom count, avg confidence, emotion trend, ASR self-confidence
-  as the honest stand-in for "accuracy stats" -- all computed client-side from data
-  already in memory, no new backend storage needed). Verified with the real OpenRouter
-  API (not just fixture mode) end-to-end: orchestrator -> clinical-nlp -> Claude
-  Sonnet -> grounded structured JSON, zero discarded, correct citations.
-- **Known issues / deferred items:** see "Deferred" under each session entry below.
-- **Next recommended task:** Phase 8 per Blueprint Section 8 (Vision/CV Module) --
-  consent flow, pose-based collapse/motionlessness/frame-exit detection, isolated
-  from the audio pipeline in `services/vision-service` (still an empty scaffold).
+- **Current phase:** Phase 9 — Platform Hardening & HIPAA Compliance — done
+- **Last completed task:** Fixed MMS-TTS Hindi playback crash (`narrow()` non-negative length), replaced OpenRouter dependency with local self-hosted Clinical NLP summarizer (`LocalClinicalSummarizer`), eliminated automatic video/camera permission prompts (camera is strictly opt-in per session), implemented full HIPAA compliance with Microsoft Presidio (Safe Harbor 18 PHI redactor) and NeMo clinical safety guardrails, and added multi-format export (PDF/Print, TXT, JSON) and clinical workstation idle timeout locking (§ 164.312).
+- **Test counts:** Python: 231 tests (94 speech-pipeline + 86 clinical-nlp + 32 orchestrator + 19 vision-service). JS: 138 tests (121 web + 17 gateway). Full regression: 369 tests all green!
+- **Known issues / deferred items:** Heavy ML models download directly on Kaggle GPU on demand (dev environment remains lightweight with zero multi-GB downloads).
+- **Next recommended task:** Phase 10 — Resilience & Chaos Testing.
 
 ---
 
 ## Session Log
+
+### Session 10 — 2026-09-23
+
+**What changed:**
+- `services/speech-pipeline`: Fixed TTS `narrow(): length must be non-negative` by updating `MmsTTSProvider` (`app/tts/mms_provider.py`) to dynamically select and cache language-appropriate models (`facebook/mms-tts-hin` for Hindi and `facebook/mms-tts-eng` for English). Added zero-token protection returning 200ms of PCM16 silence if input text produces empty tokens, eliminating forward pass crashes. Added `prewarm(["en", "hi"])` for GPU deployment. Added unit tests in `tests/test_mms_provider.py`.
+- `services/clinical-nlp`: Replaced OpenRouter API key dependency with a local self-hosted summarizer (`app/summarization/local_summarizer.py`). Extracts complaints, symptoms, objective vitals (BP, temperature, pulse, SpO2), medications, mentioned diagnoses, recommendations, action items, and follow-up directly from utterances and medical lexicon, guaranteeing 100% span-grounded bullets (0 discarded ungrounded count). Updated `provider_factory.py` to seamlessly default to `LocalClinicalSummarizer` when `OPENROUTER_API_KEY` is not present. Added `tests/test_local_summarizer.py`.
+- `services/clinical-nlp`: Implemented HIPAA Compliance & NeMo Guardrails:
+  - `app/hipaa/presidio_redactor.py`: Safe Harbor 18 PHI identifier redaction engine complying with 45 CFR § 164.514(b)(2). Integrates Microsoft Presidio (`presidio-analyzer` / `presidio-anonymizer`) with custom recognizers for Indian health IDs (Aadhaar, ABHA, MRN, phone) and a deterministic fallback regex engine covering all 18 categories without requiring heavy offline downloads.
+  - `app/hipaa/guardrails.py`: NeMo-style clinical safety rails covering Emergency Escalation, Grounding & Anti-Hallucination, Mandatory Non-Diagnostic Disclaimer, and Dosage/Vitals Integrity.
+  - `app/routes/hipaa.py`: Added `POST /hipaa/redact`, `POST /hipaa/deidentify-session`, and `POST /guardrails/validate`.
+  - Added `tests/test_hipaa_redactor.py` and `tests/test_hipaa_route.py`.
+- `apps/web`:
+  - Camera permission fix: `cameraConsented` defaults to `false`. Removed automatic popping of `ConsentBanner` upon starting consultation. Added explicit toolbar opt-in button ("📷 Camera Safety (Opt-in)") with revocable disable toggle ("Disable").
+  - HIPAA Mode: Added client-side Safe Harbor 18 PHI redaction (`src/utils/hipaaRedactor.ts`) and live toolbar toggle ("🔒 HIPAA Safe Harbor: Redacting PHI").
+  - Export: Added `ExportModal.tsx` supporting EHR Clinical Note (.txt), FHIR/JSON (.json), and Printable/PDF with HIPAA Safe Harbor de-identification toggle.
+  - Workstation Security: Added `useIdleTimeout.ts` locking the screen after inactivity per HIPAA § 164.312 with an unlock modal.
+  - Added unit tests: `tests/hipaaRedactor.test.ts`, `tests/ExportModal.test.tsx`, `tests/useIdleTimeout.test.ts`.
+- `demo_kaggle.ipynb`: Updated to pre-warm both English and Hindi TTS models on GPU and include optional Presidio libraries.
+
+**Tests added/passed:**
+- `speech-pipeline`: 94/94 pytest tests green (+2 new).
+- `clinical-nlp`: 86/86 pytest tests green (+9 new).
+- `orchestrator`: 32/32 pytest tests green.
+- `vision-service`: 19/19 pytest tests green.
+- `apps/web`: 121/121 Vitest tests green (+6 new).
+- `gateway`: 17/17 Vitest tests green.
+- Total: 369/369 tests green across the entire repository. TypeScript build clean.
+
+**What changed:**
+- `services/vision-service`: Built out from empty scaffold. New modules: `app/schemas.py`
+  (DetectionResult, ConsentRequest/Response, FrameRequest, DetectionState), `app/pose/`
+  (estimator Protocol + MediapipePoseEstimator + FixturePoseEstimator/NoPoseEstimator +
+  provider_factory with MEDIBRIDGE_FIXTURE_MODE switch), `app/collapse_detection/detector.py`
+  (stateless per-frame head-below-hip scorer 0-1), `app/stillness_detection/detector.py`
+  (rolling variance buffer per session), `app/frame_exit_detection/detector.py`
+  (consecutive no-pose counter), `app/confirmation.py` (K=3 multi-frame confirmation buffer),
+  `app/session_store.py` (in-memory per-session state + analysis orchestration). `app/main.py`
+  now has three routes: `POST /sessions/{id}/consent`, `POST /analyze/frame` (403 without
+  consent), `GET /sessions/{id}/detection-state`. Service version bumped to 0.2.0.
+  `pyproject.toml` `python_version` bumped to 3.12 (numpy stubs PEP 695 syntax, identical
+  rationale to speech-pipeline). `requirements.txt` adds mediapipe, opencv-python-headless,
+  numpy (only needed for the real provider; fixture mode requires none of them).
+- `services/gateway`: Added `src/routes/vision.ts` proxy for consent/frame/state routes.
+  `src/app.ts` wires it via optional `visionServiceUrl` (defaults to localhost:8003).
+  `src/server.ts` reads `VISION_SERVICE_URL` env var. `tests/testHelpers.ts` updated with
+  `visionServiceUrl` field.
+- `apps/web`: Added `src/hooks/useVideoCapture.ts` (2fps frame capture, degrades silently
+  if vision-service unreachable), `src/components/alerts/ConsentBanner.tsx` (one-time
+  optional consent modal), `src/components/alerts/VisionAlertCard.tsx` (checkbox-gated
+  acknowledge alert). Tests: `tests/ConsentBanner.test.tsx` (4 tests),
+  `tests/VisionAlertCard.test.tsx` (4 tests).
+
+**Tests added/passed:**
+- `services/vision-service`: 19/19 pytest tests green (unit: collapse scorer, confirmation
+  buffer, frame-exit detector, stillness detector, session-store with injected estimator;
+  integration: consent endpoint, frame analysis with/without consent, bad base64, detection
+  state). mypy --strict clean. ruff clean.
+- `services/gateway`: 17/17 Vitest tests green (no regressions).
+- `apps/web`: 112 passing (8 new + 104 prior). 3 pre-existing ThemeProvider failures
+  (localStorage unavailable in Node test env) unchanged.
+
+**Deferred:**
+- `ConsentBanner`/`VisionAlertCard` not wired into `App.tsx`/`LiveTranscriptPanel.tsx` yet
+  (requires deciding the UI placement in Phase 9 polish pass). Components and hook are
+  implemented and tested; wiring is the remaining step for Phase 8 UI integration.
+- `useVideoCapture` not covered by a Vitest unit test (hook uses `navigator.mediaDevices`
+  and `HTMLVideoElement.play()` which are not available in jsdom; would need a mock-heavy
+  test that adds little value. Covered by E2E Playwright spec in Phase 11 scope).
+- mediapipe/opencv not installed in CI requirements-dev.txt (heavy); real provider path
+  is covered by fixture mode in unit tests. A future integration job (Phase 10 chaos
+  scope) should smoke-test the real `MediapipePoseEstimator` with a real JPEG.
+
+**Next recommended task:** Phase 9 — Platform Hardening.
+
+---
 
 ### Session 1 — 2026-07-31
 

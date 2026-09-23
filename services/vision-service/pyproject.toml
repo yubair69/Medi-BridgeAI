@@ -1,6 +1,14 @@
 [tool.mypy]
 strict = true
-python_version = "3.11"
+# 3.12 for the same reason as speech-pipeline: numpy's stubs use PEP 695
+# `type` statement syntax that mypy refuses to parse at python_version < 3.12.
+python_version = "3.12"
+
+# mediapipe/opencv are only loaded by the real pose provider
+# (MEDIBRIDGE_FIXTURE_MODE != 1); not in requirements-dev.txt.
+[[tool.mypy.overrides]]
+module = ["mediapipe", "mediapipe.*", "cv2", "cv2.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
