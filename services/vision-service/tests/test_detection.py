@@ -28,7 +28,7 @@ _BLANK_JPEG = base64.b64encode(b"notreallyjpeg").decode()
 # ── unit: collapse scorer ──────────────────────────────────────────────────
 
 def _kp(nose_y: float, hip_y: float = 0.5) -> Keypoints:
-    return Keypoints(nose_y=nose_y, left_hip_y=hip_y, right_hip_y=hip_y,
+    return Keypoints(nose_x=0.5, nose_y=nose_y, left_hip_y=hip_y, right_hip_y=hip_y,
                      left_shoulder_y=0.3, right_shoulder_y=0.3)
 
 
@@ -94,10 +94,10 @@ def test_stillness_zero_when_moving() -> None:
     det = StillnessDetector(window=5)
     ys = [0.1, 0.2, 0.1, 0.3, 0.2]
     for y in ys:
-        det.update(Keypoints(nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
+        det.update(Keypoints(nose_x=0.5, nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
                              left_shoulder_y=y, right_shoulder_y=y))
     # high variance → 0
-    result = det.update(Keypoints(nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
+    result = det.update(Keypoints(nose_x=0.5, nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
                                   left_shoulder_y=0.4, right_shoulder_y=0.4))
     assert result == 0
 
@@ -105,10 +105,10 @@ def test_stillness_zero_when_moving() -> None:
 def test_stillness_nonzero_when_motionless() -> None:
     det = StillnessDetector(window=5)
     for _ in range(6):
-        det.update(Keypoints(nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
+        det.update(Keypoints(nose_x=0.5, nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
                              left_shoulder_y=0.3000, right_shoulder_y=0.3001))
     # near-zero variance → nonzero still count
-    result = det.update(Keypoints(nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
+    result = det.update(Keypoints(nose_x=0.5, nose_y=0.1, left_hip_y=0.5, right_hip_y=0.5,
                                   left_shoulder_y=0.3000, right_shoulder_y=0.3000))
     assert result > 0
 
@@ -130,7 +130,7 @@ def test_analyze_collapse_triggers_after_k_frames() -> None:
     store.set_consent("s2", True)
     estimator = FixturePoseEstimator()
     # nose_y >= hip_y → score 1.0 → collapse confirmed after 3 frames
-    kp = Keypoints(nose_y=0.6, left_hip_y=0.5, right_hip_y=0.5,
+    kp = Keypoints(nose_x=0.5, nose_y=0.6, left_hip_y=0.5, right_hip_y=0.5,
                    left_shoulder_y=0.3, right_shoulder_y=0.3)
     estimator.register(b"frame", kp)
     results = [store.analyze("s2", b"frame", estimator) for _ in range(3)]

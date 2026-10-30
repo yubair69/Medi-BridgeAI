@@ -38,10 +38,18 @@ class NLLBTranslationProvider(MTProvider):
         import torch
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._dtype = torch.float16 if self._device.type == "cuda" else torch.float32
         self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self._model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self._device)
+        self._model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_name,
+            dtype=self._dtype,
+            device_map={"": self._device},
+        )
+        self._model.eval()
 
     def translate(self, text: str, source_lang: str, target_lang: str) -> TranslationSegment:
+        import torch
+
         if source_lang == target_lang:
             return TranslationSegment(
                 text=text.strip(),
@@ -55,11 +63,12 @@ class NLLBTranslationProvider(MTProvider):
         self._tokenizer.src_lang = src_code
         inputs = self._tokenizer(text, return_tensors="pt").to(self._device)
         forced_bos_token_id = self._tokenizer.convert_tokens_to_ids(tgt_code)
-        generated = self._model.generate(
-            **inputs,
-            forced_bos_token_id=forced_bos_token_id,
-            max_new_tokens=256,
-        )
+        with torch.inference_mode():
+            generated = self._model.generate(
+                **inputs,
+                forced_bos_token_id=forced_bos_token_id,
+                max_new_tokens=256,
+            )
         translated_text = self._tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
 
         return TranslationSegment(

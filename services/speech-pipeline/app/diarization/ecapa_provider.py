@@ -47,6 +47,10 @@ class EcapaEmbeddingProvider(SpeakerEmbeddingProvider):
         import torch
 
         samples = np.frombuffer(pcm16_mono, dtype=np.int16).astype(np.float32) / 32768.0
+        # ECAPA-TDNN needs ≥ ~0.2 s; pad short chunks to avoid padding > dim error
+        min_samples = max(int(sample_rate * 0.2), 3200)
+        if len(samples) < min_samples:
+            samples = np.pad(samples, (0, min_samples - len(samples)))
         waveform = torch.from_numpy(samples).unsqueeze(0)
         embedding = self._classifier.encode_batch(waveform)
         return embedding.squeeze().detach().cpu().numpy().tolist()  # type: ignore[no-any-return]

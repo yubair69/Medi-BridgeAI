@@ -18,6 +18,7 @@ export interface UseVideoCaptureState {
   error: string | null;
   clearAlert: () => void;
   mediaStream: MediaStream | null;
+  facePosition: { cx: number; cy: number } | null;
 }
 
 /** Captures camera frames at ~2fps and POSTs them to the vision-service
@@ -32,6 +33,7 @@ export function useVideoCapture({
   const [alert, setAlert] = useState<VideoCaptureAlert | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [facePosition, setFacePosition] = useState<{ cx: number; cy: number } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -85,9 +87,16 @@ export function useVideoCapture({
               const body = (await res.json()) as {
                 alert_triggered: boolean;
                 alert_reason: string | null;
+                face_cx: number | null;
+                face_cy: number | null;
               };
               if (body.alert_triggered && body.alert_reason) {
                 setAlert({ reason: body.alert_reason, sessionId });
+              }
+              if (body.face_cx != null && body.face_cy != null) {
+                setFacePosition({ cx: body.face_cx, cy: body.face_cy });
+              } else {
+                setFacePosition(null);
               }
             })
             .catch(() => {
@@ -114,5 +123,5 @@ export function useVideoCapture({
     };
   }, [enabled, sessionId, fps, gatewayUrl]);
 
-  return { alert, error, clearAlert, mediaStream };
+  return { alert, error, clearAlert, mediaStream, facePosition };
 }

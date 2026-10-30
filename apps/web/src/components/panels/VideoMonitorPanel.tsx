@@ -4,12 +4,15 @@ import { useTheme } from "../../theme/ThemeProvider";
 export interface VideoMonitorPanelProps {
   stream: MediaStream | null;
   onDisable: () => void;
+  facePosition?: { cx: number; cy: number } | null;
 }
 
-export function VideoMonitorPanel({ stream, onDisable }: VideoMonitorPanelProps) {
+export function VideoMonitorPanel({ stream, onDisable, facePosition }: VideoMonitorPanelProps) {
   const { colors } = useTheme();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [blurFace, setBlurFace] = useState(true);
+  // Face blur patch: ~20% of frame width centered on nose position
+  const BLUR_SIZE_PCT = 20;
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -53,14 +56,26 @@ export function VideoMonitorPanel({ stream, onDisable }: VideoMonitorPanelProps)
           autoPlay
           muted
           playsInline
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            filter: blurFace ? "blur(14px)" : "none",
-            transition: "filter 0.3s ease",
-          }}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
+        {blurFace && facePosition && (
+          <div
+            style={{
+              position: "absolute",
+              left: `${(facePosition.cx * 100) - BLUR_SIZE_PCT / 2}%`,
+              top: `${(facePosition.cy * 100) - BLUR_SIZE_PCT / 2}%`,
+              width: `${BLUR_SIZE_PCT}%`,
+              height: `${BLUR_SIZE_PCT}%`,
+              backdropFilter: "blur(18px)",
+              WebkitBackdropFilter: "blur(18px)",
+              borderRadius: "50%",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+        {blurFace && !facePosition && (
+          <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", pointerEvents: "none" }} />
+        )}
         {blurFace && (
           <div
             style={{

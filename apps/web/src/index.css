@@ -1,11 +1,4 @@
-/* Presentation-layer polish only (temporary, for demoing progress through
-   the current phase) -- no component markup, text, roles, or ARIA
-   attributes change because of this file. Real UI/UX/accessibility polish
-   is Blueprint Section 8 Phase 9 scope; this is a lighter pass to make the
-   existing structure presentable in the meantime, safe to layer over or
-   replace once that phase lands. Colors come from CSS custom properties
-   ThemeProvider syncs from packages/design-tokens (see theme/ThemeProvider.tsx),
-   so this file stays in sync with light/dark mode automatically. */
+/* MediBridge AI: High-Performance Clinical Console & Environment */
 
 * {
   box-sizing: border-box;
@@ -15,6 +8,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -30,6 +25,8 @@ body {
 
 #root {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 h1,
@@ -42,15 +39,16 @@ h4 {
 
 /* Card chrome for every top-level panel/section in the dashboard --
    applied structurally via the aria-label every panel already sets for
-   accessibility, not by editing each component individually. */
+   accessibility. Glassmorphic console style applied. */
 section[aria-label],
 aside[aria-label] {
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border, #d8e1ea);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 16px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 2px rgba(15, 27, 45, 0.04);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 section[aria-label] > h2:first-child,
@@ -71,11 +69,13 @@ button {
   transition:
     filter 0.15s ease,
     transform 0.05s ease,
+    box-shadow 0.15s ease,
     opacity 0.15s ease;
 }
 
 button:hover:not(:disabled) {
   filter: brightness(1.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 button:active:not(:disabled) {
@@ -95,14 +95,6 @@ textarea:focus-visible,
   outline: 2px solid var(--color-primary, #1565c0);
   outline-offset: 2px;
 }
-
-/* Secondary buttons (e.g. "Stop consultation", role assignment, dismiss
-   controls without a semantic hook to target individually) fall back to a
-   quieter outline style via this class-free heuristic: any button that
-   isn't the first one rendered in the consultation controls row still
-   reads fine with the primary style above, so no override is needed for
-   correctness -- this comment documents that the flat single style was a
-   deliberate simplicity choice, not an oversight. */
 
 select,
 textarea,
@@ -130,7 +122,75 @@ audio {
 }
 
 mark {
-  background: transparent;
-  border-radius: 3px;
-  padding: 0 1px;
+  background: rgba(14, 165, 233, 0.18);
+  color: inherit;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-weight: 500;
+}
+
+/* Custom Sleek Scrollbar for Console Panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* Console Environment Animations */
+@keyframes breathingOrb {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 25px rgba(14, 165, 233, 0.25), inset 0 0 15px rgba(14, 165, 233, 0.15);
+  }
+  50% {
+    transform: scale(1.025);
+    box-shadow: 0 0 45px rgba(14, 165, 233, 0.45), inset 0 0 25px rgba(14, 165, 233, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 25px rgba(14, 165, 233, 0.25), inset 0 0 15px rgba(14, 165, 233, 0.15);
+  }
+}
+
+@keyframes livePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes subtitleSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.console-live-subtitle {
+  animation: subtitleSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Single-Window Zero-Scroll Console HUD Container */
+.console-viewport-mode {
+  height: calc(100vh - 100px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }

@@ -118,6 +118,19 @@ class MemoryStore:
 
     def add_timeline_event(self, session_id: str, request: AddTimelineEventRequest) -> TimelineEvent:
         memory = self._get_or_create(session_id)
+        # Deduplicate: skip if an identical (type, description) event already
+        # exists from the same source utterance — prevents ASR hallucination
+        # loops (e.g. "Aspirin, Aspirin, Aspirin...") from spamming the timeline.
+        if any(
+            e.type == request.type
+            and e.description == request.description
+            and e.source_utterance_id == request.source_utterance_id
+            for e in memory.timeline
+        ):
+            return memory.timeline[-1] if memory.timeline else self._append_timeline_event(
+                memory, event_type=request.type, description=request.description,
+                source_utterance_id=request.source_utterance_id,
+            )
         return self._append_timeline_event(
             memory, event_type=request.type, description=request.description,
             source_utterance_id=request.source_utterance_id,

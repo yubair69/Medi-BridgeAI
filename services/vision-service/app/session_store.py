@@ -68,6 +68,8 @@ class SessionStore:
             exited_frame=exited,
             alert_triggered=alert_triggered,
             alert_reason=alert_reason,
+            face_cx=kp.nose_x if kp is not None else None,
+            face_cy=kp.nose_y if kp is not None else None,
         )
         if alert_triggered:
             state.last_alert = result

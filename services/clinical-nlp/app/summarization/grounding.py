@@ -60,7 +60,9 @@ def validate_bullets(raw_bullets: Any, utterances: list[SummaryUtterance]) -> tu
             discarded += 1
             continue
 
-        reference_text = utterance.translated_text or utterance.original_text
+        # Bullets are written in English; compare against original_text (English)
+        # first, falling back to translated_text only if original is absent.
+        reference_text = utterance.original_text or utterance.translated_text or ""
         overlap = difflib.SequenceMatcher(None, text.lower(), reference_text.lower()).ratio()
         if overlap < MIN_LEXICAL_OVERLAP:
             discarded += 1

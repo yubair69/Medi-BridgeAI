@@ -26,7 +26,7 @@ def get_asr_provider() -> ASRProvider:
 
     from app.asr.faster_whisper_provider import FasterWhisperASRProvider
 
-    model_size = os.environ.get("ASR_MODEL_SIZE", "small")
+    model_size = os.environ.get("ASR_MODEL_SIZE", "medium")
 
     device = os.environ.get("ASR_DEVICE")
     compute_type = os.environ.get("ASR_COMPUTE_TYPE")

@@ -9,16 +9,18 @@ from typing import Protocol
 class Keypoints:
     """Normalized (0-1) x/y positions for the landmarks we care about."""
 
-    __slots__ = ("nose_y", "left_hip_y", "right_hip_y", "left_shoulder_y", "right_shoulder_y")
+    __slots__ = ("nose_x", "nose_y", "left_hip_y", "right_hip_y", "left_shoulder_y", "right_shoulder_y")
 
     def __init__(
         self,
+        nose_x: float,
         nose_y: float,
         left_hip_y: float,
         right_hip_y: float,
         left_shoulder_y: float,
         right_shoulder_y: float,
     ) -> None:
+        self.nose_x = nose_x
         self.nose_y = nose_y
         self.left_hip_y = left_hip_y
         self.right_hip_y = right_hip_y
@@ -70,6 +72,7 @@ class MediapipePoseEstimator:
         lm = result.pose_landmarks.landmark
         L = self._mp_pose.PoseLandmark
         return Keypoints(
+            nose_x=lm[L.NOSE].x,
             nose_y=lm[L.NOSE].y,
             left_hip_y=lm[L.LEFT_HIP].y,
             right_hip_y=lm[L.RIGHT_HIP].y,

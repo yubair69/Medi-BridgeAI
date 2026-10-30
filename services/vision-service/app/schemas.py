@@ -14,6 +14,8 @@ class DetectionResult(BaseModel):
     exited_frame: bool     # no pose detected for N consecutive frames
     alert_triggered: bool
     alert_reason: str | None
+    face_cx: float | None  # normalized 0-1 face center x (nose_x)
+    face_cy: float | None  # normalized 0-1 face center y (nose_y)
 
 
 class ConsentRequest(BaseModel):
